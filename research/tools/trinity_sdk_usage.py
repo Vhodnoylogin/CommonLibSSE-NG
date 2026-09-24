@@ -31,7 +31,7 @@ for mod, root, p in files:
     rel = os.path.relpath(p, root)
     for i, line in enumerate(src[p], 1):
         code = line.split('//')[0]
-        m = re.search(r'#include\s*<((?:Physics|Common|Animation|Behavior)[^>]*)>', code)
+        m = re.search(r'#include\s*[<"]((?:Physics|Common|Animation|Behavior)[^>"]*)[>"]', code)
         if m: inc.append([mod, f'{rel}:{i}', m.group(1)])
         for m in re.finditer(r'(?:->|\.)\s*([a-z][A-Za-z0-9_]*)\s*\(', code):
             n = m.group(1)

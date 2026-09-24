@@ -20,6 +20,13 @@ def uses(mod, name):
 by = collections.OrderedDict()
 for r in res:
     by.setdefault(r['vr'], []).append(r)
+NOTE = {  # расхождения пар «тот же адрес», найденные при сверке (gaps.md, п. 5)
+    '0xAB0E50': ('взять из CL после сверки ABI: движок возвращает hkBool через скрытый указатель (п. 5, пара 7)', 'низкая'),
+    '0x654490': ('взять из CL; порядок CL (idle, …, target) верен — так же у VRIK; typedef PLANCK переставляет idle/target', '0'),
+    '0x1F7ED0': ('взять из CL после сверки ширины результата: int16 в CL против UInt32 у HIGGS (п. 5, пара 14)', 'низкая'),
+    '0x16FE4F0': ('слот 0xBF есть (`Projectile::HandleHits`), но тип аргумента расходится: у HIGGS `hkpAllCdPointCollector*` (п. 5, пара 19)', 'низкая'),
+    '0x16F99A0': ('слот 0xBF есть (`Projectile::HandleHits`), но тип аргумента расходится: у HIGGS `hkpAllCdPointCollector*` (п. 5, пара 19)', 'низкая'),
+}
 rows = []
 for vr, rs in sorted(by.items(), key=lambda kv: int(kv[0], 16)):
     r0 = rs[0]
@@ -50,9 +57,11 @@ for vr, rs in sorted(by.items(), key=lambda kv: int(kv[0], 16)):
             todo = f"своего id нет (ближайший id {alib.split()[2]} {alib.split()[3]}): `REL::VariantID(0, 0, {vr})` или id после проверки"; cost = '1–3 строки; только VR'
         else:
             todo = f"`REL::VariantID(0, 0, {vr})` — только VR"; cost = '1–3 строки; только VR'
+    if vr in NOTE:
+        todo, cost = NOTE[vr]
     if r0.get('plausible'):
         alib += '; ' + r0['plausible']
-        if 'ложный' in r0['plausible'] and not r0['cl']:
+        if 'ложный' in r0['plausible'] and not r0['cl'] and not r0['vtslot']:
             todo = f"`REL::VariantID(0, 0, {vr})` (id из addrlib.csv не годится) " + ('— сайт вызова' if g == 'site' else '')
             cost = '1–3 строки; только VR'
     rows.append(f"| `{' / '.join(names)}` {vr} ({g}) | {who} | {cl} | {ok}; VR AL: {alib} | {todo} | {cost} |")

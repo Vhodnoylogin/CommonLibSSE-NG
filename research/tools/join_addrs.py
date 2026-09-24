@@ -13,7 +13,14 @@ import re as _re
 def _vtname(o):
     m = _re.search(r'\b(VTABLE_\w+)', o['code'])
     return m.group(1) if m and o['file'].startswith('include/RE/Offsets_VTABLE.h') else ''
-vt = sorted((o['vr'], _vtname(o)) for o in cl if o['vr'] and _vtname(o))
+_seen_line = {}
+vt = []
+for o in cl:
+    n = _vtname(o)
+    if not n: continue
+    k = _seen_line.get(o['file'], 0); _seen_line[o['file']] = k + 1   # порядок VariantID в строке = индекс в std::array
+    if o['vr']: vt.append((o['vr'], f'{n}[{k}]'))
+vt.sort()
 vt_starts = [v for v, _ in vt]
 db, al = {}, {}
 with open(VRAL / 'database.csv', encoding='utf-8-sig') as f:
@@ -43,7 +50,10 @@ def plausible(i):
     if i not in id_sse: return None
     se = id_sse[i]; d = id_vr[i] - se
     k = bisect.bisect_left(rel_se, se); nb = [x[1] for x in rel_by_sse[max(0, k - 3):k + 3]]
-    return (min(nb) - 0x100 <= d <= max(nb) + 0x100) if nb else None
+    if not nb: return None
+    lo, hi = min(nb), max(nb)
+    off = 0 if lo - 0x100 <= d <= hi + 0x100 else min(abs(d - lo), abs(d - hi))
+    return 'ok' if off == 0 else ('disputed' if off < 0x1000 else 'false')
 cl_ids = {o['id'] for o in cl if o['id'] is not None}
 def prev(sorted_keys, x, lim=0x4000):
     i = bisect.bisect_right(sorted_keys, x) - 1
@@ -60,7 +70,7 @@ for r in rows:
     if not hits:
         i = bisect.bisect_right(vt_starts, vr) - 1
         if i >= 0 and 0 < vr - vt[i][0] < 0x1000 and (vr - vt[i][0]) % 8 == 0:
-            slot = f"{vt[i][1]}[{(vr - vt[i][0]) // 8}]"
+            slot = f"{vt[i][1]}, слот {(vr - vt[i][0]) // 8} (0x{(vr - vt[i][0]) // 8:X})"
     out['vtslot'] = slot
     if vr in db:
         i, st, nm = db[vr]; out['alib'] = f"id {i} ({'выпуск' if st >= 2 else 'database.csv, status 1, не в выпуске'})"; out['alib_id'] = i; out['alib_rel'] = st >= 2
@@ -77,7 +87,8 @@ for r in rows:
         else:
             out['alib'] = 'нет в базе'; out['alib_id'] = None
     pl = plausible(out['alib_id']) if out.get('alib_id') is not None and not out.get('alib_rel') else None
-    out['plausible'] = '' if pl is None else ('сдвиг правдоподобен' if pl else 'сдвиг ложный (вероятно VR-only код)')
+    out['plausible'] = {None: '', 'ok': 'сдвиг правдоподобен', 'disputed': 'сдвиг спорный (отличие от соседей из выпуска < 0x1000) — проверить сопоставление addrlib.csv',
+                        'false': 'сдвиг ложный (вероятно VR-only код)'}[pl]
     out['id_in_cl'] = 'да' if out.get('alib_id') in cl_ids else ''
     if out['id_in_cl']:
         out['id_in_cl'] = '; '.join(sorted({f"{o['ctx']} ({o['file']})" for o in cl if o['id'] == out['alib_id']}))[:300]
